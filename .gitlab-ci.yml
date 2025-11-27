@@ -4,7 +4,6 @@ include:
     file: 'release-tag.yml'
     ref: 'master'
 
-
 # pipeline trigger if the upstream releases
 pve_cloud_controller_upstream:
   stage: build
