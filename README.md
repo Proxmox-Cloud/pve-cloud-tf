@@ -16,7 +16,3 @@ pytest -s tests/e2e/ --skip-cleanup
 `(pve-cloud/pve-cloud-tf.git/.*?ref=)(.*)(")`
 
 `$1NEW_VER$3` (vscode replace)
-
-## Examples
-
-Checkout the samples folder for connecting and authenticating terraform with pve cloud created kubernetes clusters.
