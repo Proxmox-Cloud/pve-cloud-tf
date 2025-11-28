@@ -237,8 +237,7 @@ resource "kubernetes_mutating_webhook_configuration" "adm_hook" {
       resources    = ["ingresses"]
     }
 
-    # ingress dns for everything
-    namespace_selector {}
+    # no selector - ingress dns for everything
 
     admission_review_versions = ["v1"]
     side_effects              = "None"

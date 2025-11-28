@@ -82,7 +82,7 @@ def controller_scenario(request, get_proxmoxer, get_test_env, set_pve_cloud_auth
 
   existing_zones = client.list_hosted_zones()["HostedZones"]
 
-  assert existing_zones
+  assert existing_zones is not None
 
   test_deployment_zone_exists = False
   for zone in existing_zones:
