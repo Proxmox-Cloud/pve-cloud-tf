@@ -76,7 +76,6 @@ resource "kubernetes_manifest" "moto_deployment" {
             - name: moto
               image:  motoserver/moto:5.1.17
               imagePullPolicy: IfNotPresent
-              # command: [ "route53" ]
               ports:
                 - name: http
                   containerPort: 5000
