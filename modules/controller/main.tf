@@ -77,6 +77,19 @@ resource "kubernetes_manifest" "watcher" {
   )
 }
 
+
+resource "kubernetes_config_map" "cluster_cert_entries" {
+  metadata {
+    name      = "cluster-cert-entries"
+    namespace = kubernetes_namespace.pve_cloud_controller.metadata[0].name
+  }
+
+  data = {
+    "cluster_cert_entries.json" = jsonencode(var.cluster_cert_entries)
+  }
+}
+
+
 resource "kubernetes_manifest" "adm_deployment" {
   manifest = yamldecode(<<-YAML
     apiVersion: apps/v1
@@ -88,7 +101,7 @@ resource "kubernetes_manifest" "adm_deployment" {
         app.kubernetes.io/name: pve-cloud-adm
         app.kubernetes.io/version: '${local.cloud_controller_version}'
     spec:
-      replicas: 2
+      replicas: ${var.adm_controller_replicas}
       selector:
         matchLabels:
           app.kubernetes.io/name: pve-cloud-adm
@@ -107,6 +120,9 @@ resource "kubernetes_manifest" "adm_deployment" {
                     path: tls.crt
                   - key: tls.key
                     path: tls.key
+            - name: cert-conf
+              configMap:
+                name: cluster-cert-entries
           containers:
             - name: adm
               image: "${local.cloud_controller_image}:${local.cloud_controller_version}"
@@ -115,6 +131,9 @@ resource "kubernetes_manifest" "adm_deployment" {
                 - name: pve-cloud-adm-tls
                   mountPath: "/etc/tls"  
                   readOnly: true
+                - name: cert-conf
+                  mountPath: "/etc/controller-cert-conf"
+                  raedOnly: true
               env:
                 - name: PG_CONN_STR
                   value: '${var.pg_conn_str}'
@@ -269,10 +288,18 @@ resource "kubernetes_manifest" "cron" {
                 app.kubernetes.io/version: '${local.cloud_controller_version}'
             spec:
               restartPolicy: Never
+              volumes:
+                - name: cert-conf
+                  configMap:
+                    name: cluster-cert-entries
               containers:
                 - name: cron
                   image: "${local.cloud_controller_image}:${local.cloud_controller_version}"
                   imagePullPolicy: IfNotPresent
+                  volumeMounts:
+                    - name: cert-conf
+                      mountPath: "/etc/controller-cert-conf"
+                      raedOnly: true
                   env:
                     - name: STACK_FQDN
                       value: '${var.k8s_stack_fqdn}'

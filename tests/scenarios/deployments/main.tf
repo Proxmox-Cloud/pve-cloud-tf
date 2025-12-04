@@ -90,3 +90,31 @@ resource "kubernetes_manifest" "karma_ingress" {
   YAML
   )
 } 
+
+
+
+# whitelist source ingress test (proxy protocol)
+resource "helm_release" "nginx_test_proto" {
+  repository = "https://charts.bitnami.com/bitnami"
+  chart = "nginx"
+  version = "22.0.11"
+  create_namespace = true
+  namespace = "nginx-test-prxy-proto"
+  
+  name = "nginx"
+
+  values = [
+    <<-YAML
+      service:
+        type: ClusterIP
+      ingress:
+        enabled: true
+        annotations:
+          nginx.ingress.kubernetes.io/whitelist-source-range: '127.0.0.1/32'
+        hostname: nginx-test-prxy-proto.${local.test_pve_conf["pve_test_deployments_domain"]}
+        tls: true
+        selfSigned: true
+        ingressClassName: nginx
+    YAML
+  ]
+}

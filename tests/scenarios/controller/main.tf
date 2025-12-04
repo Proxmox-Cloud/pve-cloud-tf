@@ -45,10 +45,19 @@ module "controller" {
   cloud_controller_image = var.cloud_controller_image
   cloud_controller_version = var.cloud_controller_version
   
+  adm_controller_replicas = 1 # for easier log reading
+
   route53_access_key_id = "test"
   route53_secret_access_key = "test"
   external_forwarded_ip = "127.0.0.1" # test too
   route53_endpoint_url = "http://pve-cloud-moto:5000"
+
+  cluster_cert_entries = [
+    {
+      zone = local.test_pve_conf["pve_test_deployments_domain"],
+      names = ["*"]
+    }
+  ]
 }
 
 # deploy a moto server for testing external ingress dns

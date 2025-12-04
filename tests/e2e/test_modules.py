@@ -19,6 +19,9 @@ import string
 from kubernetes.stream import stream
 from kubernetes.client import V1ObjectMeta, V1Job, V1JobSpec
 import json
+import requests
+from kubernetes.client.rest import ApiException
+import pytest
 
 
 logger = logging.getLogger(__name__)
@@ -26,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 def test_ingress_connectivity(get_test_env, get_k8s_api_v1, deployments_scenario):
   logger.info("test ingress 443 connectivity via haproxy")
-  time.sleep(10) # give ingress dns some time to trigger
   v1 = get_k8s_api_v1
   random_nginx_test_name = deployments_scenario["random_nginx_test_name"]
 
@@ -51,6 +53,108 @@ def test_ingress_connectivity(get_test_env, get_k8s_api_v1, deployments_scenario
   assert x509_cert.issuer.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value == "nginx-ca"
 
   ssl_sock.close()
+
+
+def test_proxy_proto_403(get_test_env, deployments_scenario):
+  logger.info("validate 403 from proxy proto")
+  url = f"https://nginx-test-prxy-proto.{get_test_env["pve_test_deployments_domain"]}"
+
+  response = requests.get(url, verify=False)
+
+  assert response.status_code == 403
+
+
+def test_ingress_cluster_cert_block(get_test_env, set_k8s_auth, controller_scenario):
+  kubeconfig = set_k8s_auth
+
+  # auth kubernetes api
+  with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
+    temp_file.write(kubeconfig)
+    temp_file.flush()
+    config.load_kube_config(config_file=temp_file.name)
+
+  api = client.NetworkingV1Api()
+
+  # test block logic
+  ingress_body = client.V1Ingress(
+      metadata=client.V1ObjectMeta(
+        name="test-deny-ingress",
+        namespace="default",
+      ),
+      spec=client.V1IngressSpec(
+          ingress_class_name="nginx",
+          rules=[
+              client.V1IngressRule(
+                  host="test.google.com",
+                  http=client.V1HTTPIngressRuleValue(
+                      paths=[
+                          client.V1HTTPIngressPath(
+                              path="/",
+                              path_type="Prefix",
+                              backend=client.V1IngressBackend(
+                                  service=client.V1IngressServiceBackend(
+                                      name="nonexistent-service",  # <-- Invalid on purpose
+                                      port=client.V1ServiceBackendPort(number=80)
+                                  )
+                              )
+                          )
+                      ]
+                  )
+              )
+          ]
+      )
+  )
+
+  with pytest.raises(ApiException) as exc_info:
+    resp = api.create_namespaced_ingress(
+        namespace="default",
+        body=ingress_body
+    )
+  
+  assert exc_info.value.status == 500
+  assert "is not covered by the clusters certificate!" in exc_info.value.body
+
+  # test allow logic
+
+  ingress_body = client.V1Ingress(
+      metadata=client.V1ObjectMeta(
+        name="test-allow-ingress",
+        namespace="default",
+      ),
+      spec=client.V1IngressSpec(
+          ingress_class_name="nginx",
+          rules=[
+              client.V1IngressRule(
+                  host=f"test.{get_test_env["pve_test_deployments_domain"]}",
+                  http=client.V1HTTPIngressRuleValue(
+                      paths=[
+                          client.V1HTTPIngressPath(
+                              path="/",
+                              path_type="Prefix",
+                              backend=client.V1IngressBackend(
+                                  service=client.V1IngressServiceBackend(
+                                      name="nonexistent-service",  # <-- Invalid on purpose
+                                      port=client.V1ServiceBackendPort(number=80)
+                                  )
+                              )
+                          )
+                      ]
+                  )
+              )
+          ]
+      )
+  )
+
+  resp = api.create_namespaced_ingress(
+      namespace="default",
+      body=ingress_body
+  )
+
+  print(resp)
+
+  # cleanup
+  api.delete_namespaced_ingress(name="test-allow-ingress", namespace="default")
+    
 
 
 def test_adm_pod_creation(get_k8s_api_v1, controller_scenario):
@@ -378,45 +482,11 @@ def test_backup(get_test_env, get_proxmoxer, set_k8s_auth, backup_scenario):
 
 
 
-def test_external_ingress_dns(get_k8s_api_v1, get_proxmoxer, get_test_env, deployments_scenario):
+def test_external_ingress_dns(get_k8s_api_v1, get_proxmoxer, get_test_env, deployments_scenario, get_moto_client):
   logger.info("test external ingress dns route53")
   v1 = get_k8s_api_v1
 
-  # todo: this should be massively refactored
-  proxmox = get_proxmoxer
-
-  # get the ip of our worker node
-  worker = None
-  for node in proxmox.nodes.get():
-    node_name = node["node"]
-
-    if node["status"] == "offline":
-      logger.info(f"skipping offline node {node_name}")
-      continue
-    
-    for qemu in proxmox.nodes(node_name).qemu.get():
-      if "tags" in qemu and 'pytest-k8s' in qemu["tags"] and 'worker' in qemu["tags"].split(";"):
-        worker = qemu
-        break
-
-  assert worker
-
-  resolver = dns.resolver.Resolver()
-  resolver.nameservers = [get_test_env['pve_test_cloud_inv']['bind_master_ip']]
-
-  ddns_answer = resolver.resolve(f"{worker['name']}.{get_test_env['pve_test_cloud_domain']}")
-  ddns_ips = [rdata.to_text() for rdata in ddns_answer]
-
-  assert ddns_ips
-  
-  # add zones testing zones to moto server
-  client = boto3.client(
-    "route53",
-    region_name="us-east-1",
-    endpoint_url=f"http://{ddns_ips[0]}:30500",
-    aws_access_key_id="test",
-    aws_secret_access_key="test"
-  )
+  client = get_moto_client
 
   existing_zones = client.list_hosted_zones()["HostedZones"]
 
@@ -452,3 +522,102 @@ def test_external_ingress_dns(get_k8s_api_v1, get_proxmoxer, get_test_env, deplo
   assert ext_record
   logger.info(ext_record)
     
+
+def test_delete_ingress(get_test_env, set_k8s_auth, controller_scenario, get_moto_client, set_pve_cloud_auth):
+  kubeconfig = set_k8s_auth
+  
+  # auth kubernetes api
+  with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
+    temp_file.write(kubeconfig)
+    temp_file.flush()
+    config.load_kube_config(config_file=temp_file.name)
+
+  api = client.NetworkingV1Api()
+
+  # test block logic
+  ingress_body = client.V1Ingress(
+      metadata=client.V1ObjectMeta(
+        name="test-delete-ingress",
+        namespace="default",
+      ),
+      spec=client.V1IngressSpec(
+          ingress_class_name="nginx",
+          rules=[
+              client.V1IngressRule(
+                  host=f"test-dns-delete.{get_test_env['pve_test_deployments_domain']}",
+                  http=client.V1HTTPIngressRuleValue(
+                      paths=[
+                          client.V1HTTPIngressPath(
+                              path="/",
+                              path_type="Prefix",
+                              backend=client.V1IngressBackend(
+                                  service=client.V1IngressServiceBackend(
+                                      name="nonexistent-service",  # <-- Invalid on purpose
+                                      port=client.V1ServiceBackendPort(number=80)
+                                  )
+                              )
+                          )
+                      ]
+                  )
+              )
+          ]
+      )
+  )
+
+  resp = api.create_namespaced_ingress(
+      namespace="default",
+      body=ingress_body
+  )
+
+  api.delete_namespaced_ingress(name="test-delete-ingress", namespace="default")
+
+  # validate its gone in bind dns and moto
+  bind_internal_key = set_pve_cloud_auth["bind_internal_key"]
+
+  # assert deleted from bind
+  zone = dns.zone.from_xfr(
+    dns.query.xfr(
+      get_test_env["pve_test_cloud_inv"]["bind_master_ip"], 
+      get_test_env["pve_test_deployments_domain"], 
+      keyring=dns.tsigkeyring.from_text({"internal.": bind_internal_key}), 
+      keyname="internal.",
+      keyalgorithm="hmac-sha256"
+    )
+  )
+
+  bind_records = [name.to_text() for name, _ in zone.nodes.items()]
+  logger.info(bind_records)
+
+  assert "test-dns-delete" not in bind_records
+
+  # validate not in boto aws
+  existing_zones = get_moto_client.list_hosted_zones()["HostedZones"]
+
+  logger.info(existing_zones)
+
+  assert existing_zones
+
+  test_deployment_zone = None
+  for zone in existing_zones:
+    if zone["Name"] == get_test_env['pve_test_deployments_domain'] + ".":
+      test_deployment_zone = zone
+      break
+  
+  assert test_deployment_zone
+
+  paginator = get_moto_client.get_paginator("list_resource_record_sets")
+  
+  all_records = []
+  for page in paginator.paginate(HostedZoneId=test_deployment_zone["Id"]):
+    all_records.extend(page["ResourceRecordSets"])
+
+  logger.info(all_records)
+  assert all_records
+
+  ext_record = None
+  for record in all_records:
+    if "test-dns-delete" in record["Name"]:
+      ext_record = record
+      break
+  
+  assert not ext_record

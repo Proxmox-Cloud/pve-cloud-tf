@@ -17,36 +17,12 @@ from pve_cloud_test.k8s_fixtures import *
 from pve_cloud_test.tdd_watchdog import get_ipv4
 import boto3
 import dns.resolver
+import time
 
 logger = logging.getLogger(__name__)
 
-
-# needs the set_pve_cloud_auth fixture for os.environ variables
-@pytest.fixture(scope="session")
-def controller_scenario(request, get_proxmoxer, get_test_env, set_pve_cloud_auth, get_k8s_api_v1): 
-  scenario_name = "controller"
-
-  if os.getenv("TDDOG_LOCAL_IFACE"):
-    # get version for image from redis
-    r = redis.Redis(host='localhost', port=6379, db=0)
-    local_build_ctrl_version = r.get("version.pve-cloud-controller")
-
-    if local_build_ctrl_version:
-      logger.info(f"found local version {local_build_ctrl_version.decode()}")
-      
-      # set controller base image
-      os.environ["TF_VAR_cloud_controller_image"] = f"{get_ipv4(os.getenv("TDDOG_LOCAL_IFACE"))}:5000/pve-cloud-controller"
-      os.environ["TF_VAR_cloud_controller_version"] = local_build_ctrl_version.decode()
-    else:
-      logger.warning(f"did not find local build pve cloud controller version even though TDDOG_LOCAL_IFACE env is defined")
-
-  if not request.config.getoption("--skip-apply"):
-    apply(scenario_name, get_k8s_api_v1, request.config.getoption("--tf-upgrade")) # this will wait till everything is running after apply
-
-  # configure moto
-  # todo: massively refactor
-  proxmox = get_proxmoxer
-
+# is called by controller fixture, other tests include get_moto fixture
+def init_moto(proxmox, get_test_env):
   # get the ip of our worker node
   worker = None
   for node in proxmox.nodes.get():
@@ -100,6 +76,72 @@ def controller_scenario(request, get_proxmoxer, get_test_env, set_pve_cloud_auth
 
   assert list_resp["HostedZones"]
 
+  return client
+
+
+@pytest.fixture(scope="session")
+def get_moto_client(get_test_env, get_proxmoxer, controller_scenario):
+  proxmox = get_proxmoxer
+  # get the ip of our worker node
+  worker = None
+  for node in proxmox.nodes.get():
+    node_name = node["node"]
+
+    if node["status"] == "offline":
+      logger.info(f"skipping offline node {node_name}")
+      continue
+    
+    for qemu in proxmox.nodes(node_name).qemu.get():
+      if "tags" in qemu and 'pytest-k8s' in qemu["tags"] and 'worker' in qemu["tags"].split(";"):
+        worker = qemu
+        break
+
+  assert worker
+
+  resolver = dns.resolver.Resolver()
+  resolver.nameservers = [get_test_env['pve_test_cloud_inv']['bind_master_ip']]
+
+  ddns_answer = resolver.resolve(f"{worker['name']}.{get_test_env['pve_test_cloud_domain']}")
+  ddns_ips = [rdata.to_text() for rdata in ddns_answer]
+
+  assert ddns_ips
+  
+  # add zones testing zones to moto server
+  client = boto3.client(
+    "route53",
+    region_name="us-east-1",
+    endpoint_url=f"http://{ddns_ips[0]}:30500",
+    aws_access_key_id="test",
+    aws_secret_access_key="test"
+  )
+
+  return client
+
+
+# needs the set_pve_cloud_auth fixture for os.environ variables
+@pytest.fixture(scope="session")
+def controller_scenario(request, get_proxmoxer, get_test_env, set_pve_cloud_auth, get_k8s_api_v1): 
+  scenario_name = "controller"
+
+  if os.getenv("TDDOG_LOCAL_IFACE"):
+    # get version for image from redis
+    r = redis.Redis(host='localhost', port=6379, db=0)
+    local_build_ctrl_version = r.get("version.pve-cloud-controller")
+
+    if local_build_ctrl_version:
+      logger.info(f"found local version {local_build_ctrl_version.decode()}")
+      
+      # set controller base image
+      os.environ["TF_VAR_cloud_controller_image"] = f"{get_ipv4(os.getenv("TDDOG_LOCAL_IFACE"))}:5000/pve-cloud-controller"
+      os.environ["TF_VAR_cloud_controller_version"] = local_build_ctrl_version.decode()
+    else:
+      logger.warning(f"did not find local build pve cloud controller version even though TDDOG_LOCAL_IFACE env is defined")
+
+  if not request.config.getoption("--skip-apply"):
+    apply(scenario_name, get_k8s_api_v1, request.config.getoption("--tf-upgrade")) # this will wait till everything is running after apply
+
+  # init aws moto mock server
+  init_moto(get_proxmoxer, get_test_env)
 
   yield 
 
@@ -118,6 +160,7 @@ def deployments_scenario(request, controller_scenario, get_k8s_api_v1):
 
   if not request.config.getoption("--skip-apply"):
     apply(scenario_name, get_k8s_api_v1, request.config.getoption("--tf-upgrade"))
+    time.sleep(10) # ingress dns time
 
   yield { "random_nginx_test_name": random_nginx_test_name }
 

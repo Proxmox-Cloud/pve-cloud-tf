@@ -17,6 +17,10 @@ variable "cloud_controller_version" {
   description = "Image version, normally hardcoded, only set in test cases."
 }
 
+variable "adm_controller_replicas" {
+  type = number
+  default = 2
+}
 
 variable "harbor_mirror_host" {
   type = string
@@ -80,6 +84,14 @@ variable "external_forwarded_ip" {
   default = null
 }
 
+variable "cluster_cert_entries" {
+  type = list(object({
+    zone              = string
+    names             = list(string)
+    authoritative_zone = optional(bool, false)
+    apex_zone_san      = optional(bool, false)
+  }))
+}
 # this is optional and used for e2e testing with moto aws mock
 variable "route53_endpoint_url" {
   type = string
