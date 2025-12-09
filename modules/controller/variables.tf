@@ -2,7 +2,7 @@
 # the formatting has to stay exactly the same for the auto gitlab ci variables to be able to update the version
 locals {
   cloud_controller_image = var.cloud_controller_image == null ? "tobiashvmz/pve-cloud-controller" : var.cloud_controller_image
-  cloud_controller_version = var.cloud_controller_version == null ? "1.5.1" : var.cloud_controller_version
+  cloud_controller_version = var.cloud_controller_version == null ? "1.5.2" : var.cloud_controller_version
 }
 
 variable "cloud_controller_image" {
