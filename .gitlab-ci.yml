@@ -1,6 +1,6 @@
 release_tag:
   stage: build
-  image: tobiashvmz/pve-cloud-ci:latest
+  image: tobiashvmz/pve-cloud-ci:2025121214
   script:
     - /scripts/release-tag.sh
   rules:
@@ -23,7 +23,7 @@ trigger_upstream_release_tag:
 # pipeline trigger if the upstream releases
 pve_cloud_controller_upstream:
   stage: build
-  image: tobiashvmz/pve-cloud-ci:latest
+  image: tobiashvmz/pve-cloud-ci:2025121214
   script:
     # write the new version
     - sed -i "s/var\.cloud_controller_version\s==\s\?\snull\s?\s\".*\"/var.cloud_controller_version == null ? \"${PVE_CLOUD_CONTROLLER}\"/" modules/controller/variables.tf
@@ -33,7 +33,7 @@ pve_cloud_controller_upstream:
 
 pve_cloud_backup_upstream:
   stage: build
-  image: tobiashvmz/pve-cloud-ci:latest
+  image: tobiashvmz/pve-cloud-ci:2025121214
   script:
     # write the new version
     - sed -i "s/var\.backup_image_version\s==\s\?\snull\s?\s\".*\"/var.backup_image_version == null ? \"${PVE_CLOUD_BACKUP}\"/" modules/backup/variables.tf
