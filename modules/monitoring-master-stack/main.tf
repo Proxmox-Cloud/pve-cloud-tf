@@ -1,6 +1,6 @@
 locals {
   # get all pve clusters in our cloud
-  pve_inventory = yamldecode(file("${pathexpand("~/.pve-cloud-dyn-inv.yaml")}"))[var.pve_cloud_domain]
+  pve_inventory = yamldecode(base64decode(var.pve_inventory_b64))
 
   # get ips grouped by pve cluster (for finding online hosts dynamically)
   ips_per_pve = {for pve_cluster, pve_hosts in local.pve_inventory : pve_cluster => [for pve_host, pve_hostvars in pve_hosts : pve_hostvars.ansible_host]}

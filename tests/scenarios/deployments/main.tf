@@ -7,6 +7,10 @@ variable "pve_ansible_host" {
   type = string
 }
 
+variable "pve_inventory_b64" {
+  type = string
+}
+
 variable "pve_cloud_pg_cstr" {
   type = string
 }
@@ -63,6 +67,7 @@ module "tf_monitoring" {
   # for testing
   insecure_tls = true
   alertmanger_e2e_ingress = true
+  pve_inventory_b64 = var.pve_inventory_b64
 }
 
 # expose karma directly

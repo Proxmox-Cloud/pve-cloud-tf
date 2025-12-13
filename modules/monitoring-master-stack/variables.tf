@@ -86,3 +86,8 @@ variable "alertmanger_e2e_ingress" {
   default = false
   description = "Toggle alertmanager ingress for testing purposes."
 }
+
+variable "pve_inventory_b64" {
+  type = string
+  description = "Full proxmox host inventory of the cloud, b64 encoded."
+}

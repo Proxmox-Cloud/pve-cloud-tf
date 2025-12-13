@@ -50,7 +50,7 @@ module "controller" {
   route53_access_key_id = "test"
   route53_secret_access_key = "test"
   external_forwarded_ip = "127.0.0.1" # test too
-  route53_endpoint_url = "http://pve-cloud-moto:5000"
+  route53_endpoint_url = "http://pve-cloud-moto.moto-mock.svc.cluster.local:5000"
 
   cluster_cert_entries = [
     {
@@ -60,15 +60,20 @@ module "controller" {
   ]
 }
 
+resource "kubernetes_namespace" "moto_mock" {
+  metadata {
+    name = "moto-mock"
+  }
+}
+
 # deploy a moto server for testing external ingress dns
 resource "kubernetes_manifest" "moto_deployment" {
-  depends_on = [ module.controller ]
   manifest = yamldecode(<<-YAML
     apiVersion: apps/v1
     kind: Deployment
     metadata:
       name: pve-cloud-moto
-      namespace: pve-cloud-controller
+      namespace: ${kubernetes_namespace.moto_mock.metadata[0].name}
       labels:
         app.kubernetes.io/name: pve-cloud-moto
     spec:
@@ -94,13 +99,12 @@ resource "kubernetes_manifest" "moto_deployment" {
 }
 
 resource "kubernetes_manifest" "moto_service" {
-  depends_on = [ module.controller ]
   manifest = yamldecode(<<-YAML
     apiVersion: v1
     kind: Service
     metadata:
       name: pve-cloud-moto
-      namespace: pve-cloud-controller
+      namespace: ${kubernetes_namespace.moto_mock.metadata[0].name}
     spec:
       type: NodePort
       ports:
