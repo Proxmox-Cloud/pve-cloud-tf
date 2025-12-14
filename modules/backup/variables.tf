@@ -1,7 +1,7 @@
 # we need to do these shenanigans because we cannot pass variables conditionally to this module during tdd
 locals {
   backup_image_base = var.backup_image_base == null ? "tobiashvmz/pve-cloud-backup" : var.backup_image_base
-  backup_image_version = var.backup_image_version == null ? "0.5.12" : var.backup_image_version
+  backup_image_version = var.backup_image_version == null ? "0.5.13" : var.backup_image_version
 }
 
 variable "backup_image_version" {
