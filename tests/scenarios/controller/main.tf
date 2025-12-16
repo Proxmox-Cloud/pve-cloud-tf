@@ -58,6 +58,13 @@ module "controller" {
       names = ["*"]
     }
   ]
+
+  external_domains = [
+    {
+      zone = local.test_pve_conf["pve_test_deployments_domain"],
+      names = ["external-example", "test-dns-delete"]
+    }
+  ]
 }
 
 resource "kubernetes_namespace" "moto_mock" {

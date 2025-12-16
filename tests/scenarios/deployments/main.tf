@@ -46,6 +46,30 @@ resource "helm_release" "nginx_test" {
   ]
 }
 
+resource "helm_release" "nginx_external_test" {
+  repository = "https://charts.bitnami.com/bitnami"
+  chart = "nginx"
+  version = "22.0.11"
+  create_namespace = true
+  namespace = "nginx-external-test"
+  
+  name = "nginx"
+
+  values = [
+    <<-YAML
+      service:
+        type: ClusterIP
+      ingress:
+        enabled: true
+        hostname: external-example.${local.test_pve_conf["pve_test_deployments_domain"]}
+        tls: true
+        selfSigned: true
+        ingressClassName: nginx
+    YAML
+  ]
+}
+
+
 module "tf_monitoring" {
   source = "../../../modules/monitoring-master-stack"
   pve_ansible_host = var.pve_ansible_host

@@ -92,6 +92,15 @@ variable "cluster_cert_entries" {
     apex_zone_san      = optional(bool, false)
   }))
 }
+
+variable "external_domains" {
+  type = list(object({
+    zone              = string
+    names             = list(string)
+    expose_apex      = optional(bool, false)
+  }))
+}
+
 # this is optional and used for e2e testing with moto aws mock
 variable "route53_endpoint_url" {
   type = string

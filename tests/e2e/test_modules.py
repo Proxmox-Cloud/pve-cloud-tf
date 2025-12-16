@@ -481,7 +481,6 @@ def test_backup(get_test_env, get_proxmoxer, set_k8s_auth, backup_scenario):
   assert resp.strip() == content
 
 
-
 def test_external_ingress_dns(get_k8s_api_v1, get_proxmoxer, get_test_env, deployments_scenario, get_moto_client):
   logger.info("test external ingress dns route53")
   v1 = get_k8s_api_v1
@@ -511,6 +510,7 @@ def test_external_ingress_dns(get_k8s_api_v1, get_proxmoxer, get_test_env, deplo
   logger.info(all_records)
   assert all_records
 
+  # random nginx test is not covered by external domains so it shouldnt be in the records
   random_nginx_test_name = deployments_scenario["random_nginx_test_name"]
 
   ext_record = None
@@ -519,7 +519,17 @@ def test_external_ingress_dns(get_k8s_api_v1, get_proxmoxer, get_test_env, deplo
       ext_record = record
       break
   
+  assert not ext_record
+
+  # however external-example nginx test is so it should be in the records
+  ext_record = None
+  for record in all_records:
+    if "external-example" in record["Name"]:
+      ext_record = record
+      break
+  
   assert ext_record
+
   logger.info(ext_record)
     
 
@@ -621,3 +631,88 @@ def test_delete_ingress(get_test_env, set_k8s_auth, controller_scenario, get_mot
       break
   
   assert not ext_record
+
+
+
+
+def test_update_ingress(get_test_env, set_k8s_auth, controller_scenario, get_moto_client, set_pve_cloud_auth):
+  kubeconfig = set_k8s_auth
+  
+  # auth kubernetes api
+  with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
+    temp_file.write(kubeconfig)
+    temp_file.flush()
+    config.load_kube_config(config_file=temp_file.name)
+
+  api = client.NetworkingV1Api()
+
+  # test block logic
+  ingress_body = client.V1Ingress(
+      metadata=client.V1ObjectMeta(
+        name="test-update-ingress",
+        namespace="default",
+      ),
+      spec=client.V1IngressSpec(
+          ingress_class_name="nginx",
+          rules=[
+              client.V1IngressRule(
+                  host=f"test-dns-update-initial.{get_test_env['pve_test_deployments_domain']}",
+                  http=client.V1HTTPIngressRuleValue(
+                      paths=[
+                          client.V1HTTPIngressPath(
+                              path="/",
+                              path_type="Prefix",
+                              backend=client.V1IngressBackend(
+                                  service=client.V1IngressServiceBackend(
+                                      name="nonexistent-service",  # <-- Invalid on purpose
+                                      port=client.V1ServiceBackendPort(number=80)
+                                  )
+                              )
+                          )
+                      ]
+                  )
+              )
+          ]
+      )
+  )
+
+  created = api.create_namespaced_ingress(
+      namespace="default",
+      body=ingress_body
+  )
+
+  created.spec.rules = [
+      client.V1IngressRule(
+          host=f"test-dns-update-updated.{get_test_env['pve_test_deployments_domain']}",
+          http=created.spec.rules[0].http  # keep existing paths
+      )
+  ]
+
+  updated = api.replace_namespaced_ingress(
+      name="test-update-ingress",
+      namespace="default",
+      body=created
+  )
+
+  # validate new record was created and old deleted
+  bind_internal_key = set_pve_cloud_auth["bind_internal_key"]
+
+  # assert deleted from bind
+  zone = dns.zone.from_xfr(
+    dns.query.xfr(
+      get_test_env["pve_test_cloud_inv"]["bind_master_ip"], 
+      get_test_env["pve_test_deployments_domain"], 
+      keyring=dns.tsigkeyring.from_text({"internal.": bind_internal_key}), 
+      keyname="internal.",
+      keyalgorithm="hmac-sha256"
+    )
+  )
+
+  bind_records = [name.to_text() for name, _ in zone.nodes.items()]
+  logger.info(bind_records)
+
+  assert "test-dns-update-updated" in bind_records
+
+  assert "test-dns-update-initial" not in bind_records
+
+  api.delete_namespaced_ingress(name="test-update-ingress", namespace="default")

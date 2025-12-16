@@ -80,12 +80,13 @@ resource "kubernetes_manifest" "watcher" {
 
 resource "kubernetes_config_map" "cluster_cert_entries" {
   metadata {
-    name      = "cluster-cert-entries"
+    name      = "cluster-conf"
     namespace = kubernetes_namespace.pve_cloud_controller.metadata[0].name
   }
 
   data = {
     "cluster_cert_entries.json" = jsonencode(var.cluster_cert_entries)
+    "external_domains.json" = jsonencode(var.external_domains)
   }
 }
 
@@ -120,9 +121,9 @@ resource "kubernetes_manifest" "adm_deployment" {
                     path: tls.crt
                   - key: tls.key
                     path: tls.key
-            - name: cert-conf
+            - name: cluster-conf
               configMap:
-                name: cluster-cert-entries
+                name: cluster-conf
           containers:
             - name: adm
               image: "${local.cloud_controller_image}:${local.cloud_controller_version}"
@@ -131,8 +132,8 @@ resource "kubernetes_manifest" "adm_deployment" {
                 - name: pve-cloud-adm-tls
                   mountPath: "/etc/tls"  
                   readOnly: true
-                - name: cert-conf
-                  mountPath: "/etc/controller-cert-conf"
+                - name: cluster-conf
+                  mountPath: "/etc/controller-conf"
                   raedOnly: true
               env:
                 - name: PG_CONN_STR
@@ -289,16 +290,16 @@ resource "kubernetes_manifest" "cron" {
             spec:
               restartPolicy: Never
               volumes:
-                - name: cert-conf
+                - name: cluster-conf
                   configMap:
-                    name: cluster-cert-entries
+                    name: cluster-conf
               containers:
                 - name: cron
                   image: "${local.cloud_controller_image}:${local.cloud_controller_version}"
                   imagePullPolicy: IfNotPresent
                   volumeMounts:
-                    - name: cert-conf
-                      mountPath: "/etc/controller-cert-conf"
+                    - name: cluster-conf
+                      mountPath: "/etc/controller-conf"
                       raedOnly: true
                   env:
                     - name: STACK_FQDN
