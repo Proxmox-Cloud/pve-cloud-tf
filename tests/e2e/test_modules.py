@@ -2,7 +2,6 @@
 from scenarios import *
 import ssl
 import socket
-import dns.resolver
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.x509.oid import NameOID
@@ -532,6 +531,67 @@ def test_external_ingress_dns(get_k8s_api_v1, get_proxmoxer, get_test_env, deplo
 
   logger.info(ext_record)
     
+
+def test_delete_namespace_ingress_hook(get_test_env, get_k8s_api_v1, deployments_scenario, set_pve_cloud_auth):
+  v1 = get_k8s_api_v1
+  # first we assert the internal hostname that it was created
+  bind_internal_key = set_pve_cloud_auth["bind_internal_key"]
+
+  zone = dns.zone.from_xfr(
+    dns.query.xfr(
+      get_test_env["pve_test_cloud_inv"]["bind_master_ip"], 
+      get_test_env["pve_test_deployments_domain"], 
+      keyring=dns.tsigkeyring.from_text({"internal.": bind_internal_key}), 
+      keyname="internal.",
+      keyalgorithm="hmac-sha256"
+    )
+  )
+
+  bind_records = [name.to_text() for name, _ in zone.nodes.items()]
+  logger.info(bind_records)
+
+  assert "nginx-ns-delete-test" in bind_records
+
+  # then we delete the namespace and wait for it to be gone
+  namespace = "nginx-ns-delete-test"
+  try:
+      v1.delete_namespace(name=namespace)
+  except ApiException as e:
+      raise
+  
+  start = time.time()
+
+  while True:
+    try:
+      v1.read_namespace(name=namespace)
+
+      if time.time() - start > 300: # max 300 seconds timeout
+        raise TimeoutError()
+
+      time.sleep(5)
+
+    except ApiException as e:
+      if e.status == 404:
+        break
+      raise
+      
+  # then we assert it was deleted
+  zone = dns.zone.from_xfr(
+    dns.query.xfr(
+      get_test_env["pve_test_cloud_inv"]["bind_master_ip"], 
+      get_test_env["pve_test_deployments_domain"], 
+      keyring=dns.tsigkeyring.from_text({"internal.": bind_internal_key}), 
+      keyname="internal.",
+      keyalgorithm="hmac-sha256"
+    )
+  )
+
+  bind_records = [name.to_text() for name, _ in zone.nodes.items()]
+  logger.info(bind_records)
+
+  assert "nginx-ns-delete-test" not in bind_records
+
+
 
 def test_delete_ingress(get_test_env, set_k8s_auth, controller_scenario, get_moto_client, set_pve_cloud_auth):
   kubeconfig = set_k8s_auth

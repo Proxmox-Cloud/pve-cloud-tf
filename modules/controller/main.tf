@@ -258,7 +258,32 @@ resource "kubernetes_mutating_webhook_configuration" "adm_hook" {
     }
 
     # no selector - ingress dns for everything
+    admission_review_versions = ["v1"]
+    side_effects              = "None"
+    failure_policy            = "Fail"
+  }
 
+  webhook {
+    name = "namespace.pve-cloud-adm.pve.cloud"
+
+    client_config {
+      service {
+        name      = "pve-cloud-adm"
+        namespace = kubernetes_namespace.pve_cloud_controller.metadata[0].name
+        path      = "/delete-namespace"
+        port      = 443
+      }
+      ca_bundle = tls_self_signed_cert.ca.cert_pem
+    }
+
+    rule {
+      api_groups   = [""]
+      api_versions = ["v1"]
+      resources    = ["namespaces"]
+      operations   = ["DELETE"]
+    }
+
+    # no selector - ingress dns for everything
     admission_review_versions = ["v1"]
     side_effects              = "None"
     failure_policy            = "Fail"
