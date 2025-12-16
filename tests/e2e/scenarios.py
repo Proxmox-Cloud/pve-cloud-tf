@@ -132,7 +132,7 @@ def controller_scenario(request, get_proxmoxer, get_test_env, set_pve_cloud_auth
       logger.info(f"found local version {local_build_ctrl_version.decode()}")
       
       # set controller base image
-      os.environ["TF_VAR_cloud_controller_image"] = f"{get_ipv4(os.getenv("TDDOG_LOCAL_IFACE"))}:5000/pve-cloud-controller"
+      os.environ["TF_VAR_cloud_controller_image"] = f"{get_ipv4(os.getenv('TDDOG_LOCAL_IFACE'))}:5000/pve-cloud-controller"
       os.environ["TF_VAR_cloud_controller_version"] = local_build_ctrl_version.decode()
     else:
       logger.warning(f"did not find local build pve cloud controller version even though TDDOG_LOCAL_IFACE env is defined")
@@ -181,7 +181,7 @@ def backup_scenario(request, set_pve_cloud_auth, get_k8s_api_v1):
       logger.info(f"found local version {local_build_backup_version.decode()}")
       
       # set controller base image
-      os.environ["TF_VAR_backup_image_base"] = f"{get_ipv4(os.getenv("TDDOG_LOCAL_IFACE"))}:5000/pve-cloud-backup"
+      os.environ["TF_VAR_backup_image_base"] = f"{get_ipv4(os.getenv('TDDOG_LOCAL_IFACE'))}:5000/pve-cloud-backup"
       os.environ["TF_VAR_backup_image_version"] = local_build_backup_version.decode()
     else:
       logger.warning(f"did not find local build pve cloud build version even though TDDOG_LOCAL_IFACE is defined")

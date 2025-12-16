@@ -34,7 +34,7 @@ def test_ingress_connectivity(get_test_env, get_k8s_api_v1, deployments_scenario
   # validate custom nginx with self signed cert
   resolver = dns.resolver.Resolver()
   resolver.nameservers = [get_test_env["pve_test_cloud_inv"]["bind_master_ip"],get_test_env["pve_test_cloud_inv"]["bind_slave_ip"]]
-  answers = resolver.resolve(f"{random_nginx_test_name}.{get_test_env["pve_test_deployments_domain"]}", 'A')
+  answers = resolver.resolve(f"{random_nginx_test_name}.{get_test_env['pve_test_deployments_domain']}", 'A')
   proxy_ip_resolved = answers[0].to_text()
   logger.info(proxy_ip_resolved)
 
@@ -45,7 +45,7 @@ def test_ingress_connectivity(get_test_env, get_k8s_api_v1, deployments_scenario
   context.verify_mode = ssl.CERT_NONE 
 
   conn = socket.create_connection((proxy_ip_resolved, 443), timeout=5)
-  ssl_sock = context.wrap_socket(conn, server_hostname=f"{random_nginx_test_name}.{get_test_env["pve_test_deployments_domain"]}")
+  ssl_sock = context.wrap_socket(conn, server_hostname=f"{random_nginx_test_name}.{get_test_env['pve_test_deployments_domain']}")
   cert = ssl_sock.getpeercert(binary_form=True)
   x509_cert = x509.load_der_x509_certificate(cert, default_backend())
 
@@ -56,7 +56,7 @@ def test_ingress_connectivity(get_test_env, get_k8s_api_v1, deployments_scenario
 
 def test_proxy_proto_403(get_test_env, deployments_scenario):
   logger.info("validate 403 from proxy proto")
-  url = f"https://nginx-test-prxy-proto.{get_test_env["pve_test_deployments_domain"]}"
+  url = f"https://nginx-test-prxy-proto.{get_test_env['pve_test_deployments_domain']}"
 
   response = requests.get(url, verify=False)
 
@@ -124,7 +124,7 @@ def test_ingress_cluster_cert_block(get_test_env, set_k8s_auth, controller_scena
           ingress_class_name="nginx",
           rules=[
               client.V1IngressRule(
-                  host=f"test.{get_test_env["pve_test_deployments_domain"]}",
+                  host=f"test.{get_test_env['pve_test_deployments_domain']}",
                   http=client.V1HTTPIngressRuleValue(
                       paths=[
                           client.V1HTTPIngressPath(
@@ -287,7 +287,7 @@ def test_ingress_dns(get_test_env, set_pve_cloud_auth, deployments_scenario):
 def test_monitoring_alert_rules(get_test_env, deployments_scenario):
   logger.info("test prometheus alert manager rules firing")
  
-  response = requests.get(f"http://alertmgr.{get_test_env["pve_test_deployments_domain"]}/api/v2/alerts", timeout=5)
+  response = requests.get(f"http://alertmgr.{get_test_env['pve_test_deployments_domain']}/api/v2/alerts", timeout=5)
   response.raise_for_status()
 
   alerts = response.json()
@@ -434,7 +434,7 @@ def test_backup(get_test_env, get_proxmoxer, set_k8s_auth, backup_scenario):
 
   # restore the backup
   full_restore_command = (f"/opt/bdd/.venv/bin/brctl restore-k8s --backup-path /mnt/backup-drive --timestamp {latest_backup_timestamp} " + 
-    f"--k8s-stack-name pytest-k8s.{get_test_env["pve_test_cloud_domain"]} --namespace-mapping test-backup-source:test-backup-restore " +
+    f"--k8s-stack-name pytest-k8s.{get_test_env['pve_test_cloud_domain']} --namespace-mapping test-backup-source:test-backup-restore " +
     "--auto-scale --auto-delete")
   
   logger.info(full_restore_command)
