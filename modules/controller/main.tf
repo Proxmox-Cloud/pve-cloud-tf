@@ -5,11 +5,17 @@ resource "kubernetes_namespace" "pve_cloud_controller" {
 }
 
 locals {
-  default_exclude_adm_namespaces = [
+  default_exclude_mirror_namespaces = [
     "default", "kube-system", "kube-public", 
     "kube-node-lease", "pve-cloud-controller", 
     "nginx-ingress", "ceph-csi", "pve-cloud-backup",
     "pve-cloud-monitoring-master", "pve-cloud-monitoring-client"
+  ]
+
+  default_exclude_tls_namespaces = [
+    "default", "kube-system", "kube-public", 
+    "kube-node-lease", "pve-cloud-controller", 
+    "nginx-ingress", "ceph-csi", "pve-cloud-backup"
   ]
 }
 
@@ -64,8 +70,8 @@ resource "kubernetes_manifest" "watcher" {
                   value: '${var.k8s_stack_fqdn}'
                 - name: PG_CONN_STR
                   value: '${var.pg_conn_str}'
-                - name: EXCLUDE_BASE_NAMESPACES
-                  value: '${join(",", local.default_exclude_adm_namespaces)}'
+                - name: EXCLUDE_TLS_NAMESPACES
+                  value: '${join(",", concat(local.default_exclude_tls_namespaces, var.exclude_tls_namespaces))}'
       %{ if var.harbor_mirror_host != null && var.harbor_mirror_auth != null }
                 - name: HARBOR_MIRROR_HOST
                   value: '${var.harbor_mirror_host}'
@@ -138,8 +144,8 @@ resource "kubernetes_manifest" "adm_deployment" {
               env:
                 - name: PG_CONN_STR
                   value: '${var.pg_conn_str}'
-                - name: EXCLUDE_ADM_NAMESPACES
-                  value: '${join(",", concat(local.default_exclude_adm_namespaces, var.exclude_adm_webhook_namespaces))}'
+                - name: EXCLUDE_MIRROR_NAMESPACES
+                  value: '${join(",", concat(local.default_exclude_mirror_namespaces, var.exclude_mirror_namespaces))}'
       %{ if var.harbor_mirror_host != null && var.harbor_mirror_auth != null }
                 - name: HARBOR_MIRROR_HOST
                   value: '${var.harbor_mirror_host}'
@@ -228,7 +234,7 @@ resource "kubernetes_mutating_webhook_configuration" "adm_hook" {
       match_expressions {
         key = "kubernetes.io/metadata.name"
         operator = "NotIn"
-        values = concat(local.default_exclude_adm_namespaces, var.exclude_adm_webhook_namespaces)
+        values = concat(local.default_exclude_mirror_namespaces, var.exclude_mirror_namespaces)
       }
     }
 
@@ -359,8 +365,10 @@ resource "kubernetes_manifest" "cron" {
                     - name: ROUTE53_ENDPOINT_URL
                       value: '${var.route53_endpoint_url}'
       %{ endif}
-                    - name: EXCLUDE_BASE_NAMESPACES
-                      value: '${join(",", local.default_exclude_adm_namespaces)}'
+                    - name: EXCLUDE_MIRROR_NAMESPACES
+                      value: '${join(",", concat(local.default_exclude_mirror_namespaces, var.exclude_mirror_namespaces))}'
+                    - name: EXCLUDE_TLS_NAMESPACES
+                      value: '${join(",", concat(local.default_exclude_tls_namespaces, var.exclude_tls_namespaces))}'
                   command: [ "cron" ]
   YAML
   )

@@ -44,9 +44,15 @@ variable "pg_conn_str" {
   description = "Postgres connection string to pve cloud patroni postgres service."
 }
 
-variable "exclude_adm_webhook_namespaces" {
+variable "exclude_mirror_namespaces" {
   type = list(string)
-  description = "Namespaces to exclude from admission controller patch."
+  description = "Namespaces to exclude from harbor registry mirroring (admission controller hook)."
+  default = []
+}
+
+variable "exclude_tls_namespaces" {
+  type = list(string)
+  description = "Namespaces that dont get cluster-tls injected."
   default = []
 }
 
